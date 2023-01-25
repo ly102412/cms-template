@@ -1,5 +1,7 @@
 import axios from 'axios'
+import store from '@/store'
 import { ElMessage } from 'element-plus'
+import { isCheckTimeout } from '@/utils/auth'
 
 const service = axios.create({
   baseURL: process.env.VUE_APP_BASE_API,
@@ -7,10 +9,24 @@ const service = axios.create({
 })
 
 // 请求拦截
-service.interceptors.request.use((config) => {
-  config.headers.icode = 'FDD8A547D2E81512'
-  return config
-})
+service.interceptors.request.use(
+  (config) => {
+    if (store.getters.token) {
+      if (isCheckTimeout()) {
+        store.dispatch('user/logout')
+        return Promise.reject(new Error('token 失效'))
+      }
+      config.headers.Authorization = `Bearer ${store.getters.token}`
+    }
+    // 配置接口国际化
+    config.headers['Accept-Language'] = store.getters.language
+    config.headers.icode = 'FDD8A547D2E81512'
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
 
 // 响应拦截
 service.interceptors.response.use(
@@ -26,6 +42,13 @@ service.interceptors.response.use(
     }
   },
   (error) => {
+    if (
+      error.response &&
+      error.response.data &&
+      error.response.data.code === 401
+    ) {
+      store.dispatch('user/logout')
+    }
     ElMessage.error(error.message)
     return Promise.reject(error)
   }
